@@ -1,7 +1,7 @@
 /* 焼きそばレジ Service Worker
    アプリ本体は「キャッシュ優先＋裏で更新」。電波が弱くても即起動し、次回起動時に新しい版へ切り替わる。
    index.html などを更新したら VERSION を上げること。 */
-const VERSION = "v8";
+const VERSION = "v9";
 const APP = "yakisoba-app-" + VERSION;
 const LIB = "yakisoba-lib"; // Firebase SDK（URLに版が入っていて中身が変わらないので、版をまたいで残す）
 const SHELL = [
