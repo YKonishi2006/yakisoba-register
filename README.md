@@ -50,7 +50,7 @@ PCで使うときは、数字キー・Backspace・Enter（会計）・Esc（お�
 3. **Authentication** →「始める」→ ログイン方法で **メール / パスワード** を有効にする。
    「ユーザー」タブ →「ユーザーを追加」で、スタッフ共用のメールアドレスとパスワードを作る。
 4. **Authentication →「設定」→「承認済みドメイン」** に `ykonishi2006.github.io` を追加。
-5. **Firestore Database →「ルール」** に [firestore.rules](firestore.rules) の内容を貼り、`staff@example.com` を手順3のメールアドレスに置き換えて「公開」。
+5. 左メニューの **Firestore Database**（Realtime Database ではない）→「ルール」タブで、最初から入っている文字を**すべて消してから** [firestore.rules](firestore.rules) の内容を貼り、`staff@example.com` を手順3のメールアドレスに置き換えて「公開」。
 6. **プロジェクトの設定（歯車）→「マイアプリ」→ ウェブ（`</>`）** でアプリを登録し、表示される `firebaseConfig` の `{ ... }` を [firebase-config.js](firebase-config.js) の `null` と置き換えてプッシュ。
 7. 各タブレットでアプリを開き（更新が反映されるまで2回開く）、設定タブ →「クラウド保存」でログイン。レジ名も端末ごとに設定。
 
