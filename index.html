@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>焼きそばレジ</title>
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="焼きそばレジ">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+/* Layout（タブレット横）: 左=注文リストと合計 / 右上=商品タイル / 右中=お預り金額とテンキー / 右下=お釣り＋会計ボタン。
+   スマホ幅では 商品 → 注文 → テンキー の縦並びで、会計バーだけ画面下に固定。
+   色は意味にだけ使う：商品＝緑/赤のバー、主ボタン＝青、不足＝赤。ほかは無彩色。 */
+:root{
+  --bg:#f2f2f7; --panel:#ffffff; --sep:#d8d8de; --fg:#1c1c1e; --muted:#6c6c70;
+  --accent:#0a66d6; --accent-ink:#ffffff; --accent-soft:#e8f1fc; --press:#e5e5ea;
+  --nashi:#248a3d; --ari:#d70015; --danger:#d70015; --badge-ink:#ffffff;
+  --font:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI","Meiryo",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#000000; --panel:#1c1c1e; --sep:#38383a; --fg:#ffffff; --muted:#a1a1a6;
+  --accent:#0a84ff; --accent-ink:#ffffff; --accent-soft:#0b2a4a; --press:#3a3a3c;
+  --nashi:#30d158; --ari:#ff453a; --danger:#ff6961; --badge-ink:#000000; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#000000; --panel:#1c1c1e; --sep:#38383a; --fg:#ffffff; --muted:#a1a1a6;
+  --accent:#0a84ff; --accent-ink:#ffffff; --accent-soft:#0b2a4a; --press:#3a3a3c;
+  --nashi:#30d158; --ari:#ff453a; --danger:#ff6961; --badge-ink:#000000; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:17px;line-height:1.4;margin:0;overscroll-behavior:none;
+  display:flex;flex-direction:column;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;touch-action:manipulation}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button:disabled{cursor:default}
+.num{font-variant-numeric:tabular-nums}
+.gut{padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
+
+header{background:var(--panel);border-bottom:1px solid var(--sep);padding-top:env(safe-area-inset-top,0px)}
+header .in{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:52px}
+header h1{font-size:17px;font-weight:700;margin:0}
+header .meta{color:var(--muted);font-size:15px;display:flex;gap:16px;white-space:nowrap;overflow:hidden}
+.offline{color:var(--danger);font-weight:600}
+
+.view{flex:1;min-height:0;display:flex;flex-direction:column}
+
+/* 主ボタン（青）と副ボタン */
+.primary{background:var(--accent);color:var(--accent-ink);border-radius:14px;font-size:20px;font-weight:700;min-height:64px}
+.primary:active:not(:disabled){filter:brightness(.9)}
+.primary:disabled{background:var(--press);color:var(--muted)}
+.secondary{background:var(--panel);border:1.5px solid var(--sep);border-radius:14px;font-size:17px;font-weight:600;min-height:64px}
+.secondary:active{background:var(--press)}
+
+/* 販売業務 */
+.sell{flex:1;min-height:0;display:grid;gap:16px;padding:16px max(20px,env(safe-area-inset-right,0px)) 16px max(20px,env(safe-area-inset-left,0px));
+  grid-template-columns:minmax(300px,.85fr) minmax(0,1.3fr);grid-template-rows:auto minmax(0,1fr) auto;
+  grid-template-areas:"order tiles" "order pay" "order bar"}
+
+.tiles{grid-area:tiles;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tile{position:relative;background:var(--panel);border:1px solid var(--sep);border-bottom:6px solid var(--c);border-radius:14px;
+  min-height:clamp(108px,17vh,150px);padding:14px 18px;display:flex;flex-direction:column;justify-content:flex-end;text-align:left}
+.tile:active{background:var(--press)}
+.tile .kind{font-size:15px;color:var(--muted)}
+.tile .nm{font-size:30px;font-weight:700;line-height:1.2}
+.tile .pr{font-size:17px;color:var(--muted)}
+.tile .cnt{position:absolute;top:12px;right:12px;min-width:40px;height:40px;padding:0 10px;border-radius:20px;background:var(--c);color:var(--badge-ink);
+  display:grid;place-items:center;font-size:20px;font-weight:700}
+.t-nashi{--c:var(--nashi)} .t-ari{--c:var(--ari)}
+
+.order{grid-area:order;background:var(--panel);border:1px solid var(--sep);border-radius:14px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.ohead{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px 12px 20px;border-bottom:1px solid var(--sep);min-height:56px}
+.ohead h2{margin:0;font-size:20px;font-weight:700}
+.ohead .paid{color:var(--accent)}
+.textbtn{min-height:44px;padding:0 8px;font-weight:600;color:var(--danger)}
+.lines{flex:1;overflow:auto}
+.line{display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--sep)}
+.line .nm{font-weight:700}
+.line .unit{color:var(--muted);font-size:15px}
+.line .amt{font-size:20px;font-weight:600;text-align:right}
+.stepper{display:flex;align-items:center;border:1.5px solid var(--sep);border-radius:12px;overflow:hidden;justify-self:start}
+.stepper button{width:56px;height:44px;font-size:24px;color:var(--accent)}
+.stepper button:active{background:var(--press)}
+.stepper .q{min-width:52px;text-align:center;font-size:20px;font-weight:600;border-inline:1.5px solid var(--sep);line-height:44px}
+.line .qty{font-size:17px;color:var(--muted)}
+.empty{color:var(--muted);text-align:center;padding:40px 20px}
+.ofoot{border-top:1px solid var(--sep);padding:14px 20px 16px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.ofoot .k{font-size:17px;color:var(--muted)}
+.ofoot .v{font-size:44px;font-weight:700;line-height:1.1}
+
+.pay{grid-area:pay;background:var(--panel);border:1px solid var(--sep);border-radius:14px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.amount{display:flex;align-items:center;gap:12px;padding:10px 20px 10px 12px;border-bottom:1px solid var(--sep);min-height:76px}
+.amount .clr{width:44px;height:44px;border-radius:22px;display:grid;place-items:center;color:var(--muted)}
+.amount .clr:active{background:var(--press)}
+.amount .clr svg{width:26px;height:26px}
+.amount .k{font-size:17px;color:var(--muted)}
+.amount .v{margin-left:auto;font-size:44px;font-weight:600;line-height:1}
+.amount .v.ph{color:var(--muted)}
+.pad{flex:1;display:grid;grid-template-columns:repeat(3,1fr) 1.15fr;grid-auto-rows:minmax(56px,1fr);gap:1px;background:var(--sep)}
+.pad button{background:var(--panel);font-size:28px}
+.pad button:active:not(:disabled){background:var(--press)}
+.pad button:disabled{color:var(--muted);opacity:.5}
+.pad .bill{background:var(--accent-soft);color:var(--accent);font-size:18px;font-weight:700}
+.pad .bs svg{width:30px;height:30px;vertical-align:middle}
+
+.bar{grid-area:bar;display:grid;grid-template-columns:1fr 1.2fr;gap:12px}
+.result{background:var(--panel);border:1px solid var(--sep);border-radius:14px;padding:8px 18px;display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:72px}
+.result .k{font-size:17px;color:var(--muted);white-space:nowrap}
+.result .v{font-size:32px;font-weight:700}
+.result.short .k,.result.short .v{color:var(--danger)}
+.bar .primary{min-height:72px;font-size:22px}
+
+/* 会計後：お釣りを大きく */
+.done{grid-area:pay / pay / bar / bar;background:var(--panel);border:1px solid var(--sep);border-radius:14px;padding:24px;display:flex;flex-direction:column;gap:8px}
+.done .k{font-size:20px;font-weight:600}
+.done .big{font-size:clamp(64px,10vw,104px);font-weight:700;line-height:1.05;text-align:right}
+.done dl{margin:8px 0 0;display:grid;grid-template-columns:1fr auto;gap:6px 16px;font-size:20px}
+.done dt{color:var(--muted)} .done dd{margin:0;text-align:right;font-weight:600}
+.done .hint{color:var(--muted);font-size:15px;margin-top:auto;padding-top:16px}
+.done .acts{display:grid;grid-template-columns:1fr 2fr;gap:12px}
+.done .primary,.done .secondary{min-height:72px}
+.done .secondary{color:var(--danger)}
+
+/* 取引履歴・精算・設定 */
+.page{flex:1;overflow:auto;padding-block:20px;display:flex;flex-direction:column;gap:16px}
+.page h2{margin:0;font-size:28px;font-weight:700}
+.ph{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--sep);border-radius:14px;padding:16px}
+.card small{color:var(--muted);display:block;font-size:15px}
+.card strong{font-size:28px;font-weight:700}
+/* 目標達成率ゲージ（半円） */
+.gauge{background:var(--panel);border:1px solid var(--sep);border-radius:14px;padding:16px 20px 18px}
+.gauge h3{margin:0 0 4px;font-size:17px;font-weight:700}
+.gauge svg{display:block;width:100%;max-width:420px;margin:0 auto}
+.g-track,.g-fill{fill:none;stroke-width:20;stroke-linecap:round}
+.g-track{stroke:var(--press)}
+.g-fill{stroke:var(--accent);transition:stroke-dasharray .6s ease-out}
+.g-pct{font-size:44px;font-weight:700;fill:var(--fg)}
+.g-sub{font-size:13px;fill:var(--muted)}
+.legend{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:13px;max-width:420px;margin:4px auto 0}
+@media (prefers-reduced-motion:reduce){.g-fill{transition:none}}
+.tw{overflow-x:auto;background:var(--panel);border:1px solid var(--sep);border-radius:14px}
+table{width:100%;border-collapse:collapse}
+td,th{padding:12px 14px;border-bottom:1px solid var(--sep);text-align:left;white-space:nowrap}
+th{color:var(--muted);font-weight:600;font-size:15px}
+td.rt,th.rt{text-align:right}
+tr:last-child td{border-bottom:0}
+tr.void td{color:var(--muted);text-decoration:line-through}
+.mini{border:1.5px solid var(--sep);border-radius:10px;min-height:44px;padding:0 14px;font-size:15px;font-weight:600;background:var(--panel)}
+.mini:active{background:var(--press)}
+.mini.danger{color:var(--danger);border-color:var(--danger)}
+.set{background:var(--panel);border:1px solid var(--sep);border-radius:14px}
+.set .row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:10px 16px;min-height:56px;border-bottom:1px solid var(--sep)}
+.set .row:last-child{border-bottom:0}
+.set input[type=number]{font:inherit;width:140px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--sep);background:var(--bg);color:var(--fg);text-align:right}
+.set input[type=checkbox]{width:28px;height:28px;accent-color:var(--accent)}
+.set .pv{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.set .pv b{font-size:20px}
+.mini.go{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+tr.ev td{color:var(--accent);font-weight:600;background:var(--accent-soft)}
+.note{color:var(--muted);font-size:15px;line-height:1.6;margin:0}
+
+nav.tabs{background:var(--panel);border-top:1px solid var(--sep);display:grid;grid-template-columns:repeat(4,1fr);
+  padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+nav.tabs button{min-height:56px;padding:6px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--muted);font-size:13px;font-weight:600}
+nav.tabs button[aria-current="page"]{color:var(--accent)}
+nav.tabs svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+.toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);
+  padding:12px 20px;border-radius:14px;font-weight:600;z-index:30;max-width:calc(100% - 32px);text-align:center}
+
+@media (max-width:820px){
+  .sell{overflow:auto;padding-bottom:0;grid-template-columns:1fr;grid-template-rows:auto;grid-template-areas:"tiles" "order" "pay" "bar"}
+  .order,.pay{overflow:visible;min-height:auto}
+  .pad .bill{font-size:15px}
+  .result{flex-direction:column;align-items:flex-start;justify-content:center;gap:0;padding:6px 14px}
+  .result .k{font-size:15px}
+  .result .v{font-size:26px;line-height:1.15}
+  .lines{overflow:visible}
+  .ofoot .v{font-size:36px}
+  .pad{grid-auto-rows:60px}
+  .tile .nm{font-size:26px}
+  /* 会計バーは画面下に固定 */
+  .bar{position:sticky;bottom:0;z-index:2;background:var(--bg);padding:12px 0 16px;margin-top:-4px}
+  .done{grid-area:pay / pay / bar / bar}
+  .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:420px){
+  header .meta .today{display:none}
+}
+</style>
+</head>
+<body>
+
+<header><div class="in gut">
+  <h1>焼きそばレジ</h1>
+  <div class="meta num"><span id="net" class="offline" hidden>オフライン</span><span class="today" id="sToday"></span><span id="txNo">No.1</span><span id="clock"></span></div>
+</div></header>
+
+<!-- 販売業務 -->
+<section class="view" id="v-sell">
+  <div class="sell">
+    <div class="tiles">
+      <button class="tile t-nashi" data-id="nashi" aria-label="焼きそば 紅しょうがなし"><span class="cnt" hidden></span><span class="kind">焼きそば</span><span class="nm">紅なし</span><span class="pr num"></span></button>
+      <button class="tile t-ari" data-id="ari" aria-label="焼きそば 紅しょうがあり"><span class="cnt" hidden></span><span class="kind">焼きそば</span><span class="nm">紅あり</span><span class="pr num"></span></button>
+    </div>
+
+    <div class="order">
+      <div class="ohead"><h2 id="oHead">注文</h2><button class="textbtn" id="btnClear">すべて削除</button></div>
+      <div class="lines" id="lines"></div>
+      <div class="ofoot"><span class="k" id="oQty">合計</span><span class="v num" id="oTot">¥0</span></div>
+    </div>
+
+    <div class="pay" id="pay">
+      <div class="amount">
+        <button class="clr" id="btnRecvClear" aria-label="お預りを消す"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.2 12.8-1.4 1.4L12 13.4l-2.8 2.8-1.4-1.4 2.8-2.8-2.8-2.8 1.4-1.4 2.8 2.8 2.8-2.8 1.4 1.4-2.8 2.8z"/></svg></button>
+        <span class="k">お預り</span><span class="v num" id="aRecv">¥0</span>
+      </div>
+      <div class="pad" id="pad">
+        <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button><button class="bill" data-add="10000">+¥10,000</button>
+        <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button><button class="bill" data-add="5000">+¥5,000</button>
+        <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button><button class="bill" data-add="1000">+¥1,000</button>
+        <button data-k="0">0</button><button data-k="00">00</button><button class="bs" data-k="bs" aria-label="1文字消す"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M9 5h11v14H9l-6-7z"/><path d="m12 9 5 6m0-6-5 6" stroke-linecap="round"/></svg></button><button class="bill" data-k="exact">ちょうど</button>
+      </div>
+    </div>
+
+    <div class="bar" id="bar">
+      <div class="result" id="result"><span class="k" id="rK">お釣り</span><span class="v num" id="rV">—</span></div>
+      <button class="primary" id="btnPay" disabled>会計する</button>
+    </div>
+
+    <div class="done" id="done" hidden aria-live="polite">
+      <span class="k">お釣り</span>
+      <span class="big num" id="dCh">¥0</span>
+      <dl class="num"><dt>合計</dt><dd id="dTot"></dd><dt>お預り</dt><dd id="dRecv"></dd></dl>
+      <p class="hint">商品をタップすると、次のお客様の会計が始まります。</p>
+      <div class="acts"><button class="secondary" id="btnFix">訂正</button><button class="primary" id="btnNext">次のお客様</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- 取引履歴 -->
+<section class="view" id="v-hist" hidden>
+  <div class="page gut">
+    <div class="ph"><h2>取引履歴</h2><button class="mini" data-csv>CSVで保存</button></div>
+    <div class="tw"><table>
+      <thead><tr><th>No.</th><th>時刻</th><th class="rt">単価</th><th class="rt">紅なし</th><th class="rt">紅あり</th><th class="rt">合計</th><th class="rt">預り</th><th class="rt">お釣り</th><th></th></tr></thead>
+      <tbody id="histBody"></tbody>
+    </table></div>
+    <p class="note">取消した取引は線で消され、集計から外れます。</p>
+  </div>
+</section>
+
+<!-- 精算 -->
+<section class="view" id="v-close" hidden>
+  <div class="page gut">
+    <div class="ph"><h2>精算</h2><button class="mini" data-csv>取引履歴をCSVで保存</button></div>
+    <div class="cards num">
+      <div class="card"><small>紅なし</small><strong id="cNashi">0食</strong></div>
+      <div class="card"><small>紅あり</small><strong id="cAri">0食</strong></div>
+      <div class="card"><small>合計食数</small><strong id="cAll">0食</strong></div>
+      <div class="card"><small>売上（現金）</small><strong id="cSales">¥0</strong></div>
+      <div class="card"><small>取引数</small><strong id="cTx">0件</strong></div>
+      <div class="card"><small>売上 − 原価</small><strong id="cProfit">¥0</strong></div>
+    </div>
+    <div class="tw" id="byPrice" hidden><table>
+      <thead><tr><th>単価別</th><th class="rt">食数</th><th class="rt">売上</th></tr></thead>
+      <tbody id="byPriceBody"></tbody>
+    </table></div>
+    <div class="gauge">
+      <h3>目標達成率</h3>
+      <svg viewBox="0 0 240 140" role="img" id="gSvg" aria-label="目標達成率">
+        <path class="g-track" d="M20 120 A100 100 0 0 1 220 120" pathLength="100"/>
+        <path class="g-fill" id="gFill" d="M20 120 A100 100 0 0 1 220 120" pathLength="100" stroke-dasharray="0 100"/>
+        <text class="g-pct num" id="cRate" x="120" y="102" text-anchor="middle">0%</text>
+        <text class="g-sub num" id="gCount" x="120" y="128" text-anchor="middle">0 / 1,000食</text>
+      </svg>
+      <div class="legend num"><span>0食</span><span id="cBeLab"></span><span id="cGoal">1,000食</span></div>
+    </div>
+    <p class="note" id="cBreak"></p>
+    <p class="note">レジ締めのときは、レジの現金からつり銭準備金を引いた額が「売上（現金）」と一致するか確認してください。</p>
+  </div>
+</section>
+
+<!-- 設定 -->
+<section class="view" id="v-set" hidden>
+  <div class="page gut">
+    <h2>設定</h2>
+    <div class="set">
+      <div class="row" id="priceView"><span>販売価格（1食・税込）</span><span class="pv"><b class="num" id="curPrice"></b><button class="mini" id="btnPrice">変更</button></span></div>
+      <div class="row" id="priceEdit" hidden><label for="iPrice">新しい販売価格</label><span class="pv"><input id="iPrice" type="number" inputmode="numeric" min="1" step="10"><button class="mini" id="priceNo">やめる</button><button class="mini go" id="priceOk">変更する</button></span></div>
+      <div class="row"><label for="iGoal">目標販売食数</label><input id="iGoal" type="number" inputmode="numeric" min="1"></div>
+      <div class="row"><label for="iCost">原価合計（円）</label><input id="iCost" type="number" inputmode="numeric" min="0"></div>
+      <div class="row"><label for="iSound">キーを押したときの音</label><input id="iSound" type="checkbox"></div>
+    </div>
+    <p class="note">価格を変えると、変えた時刻と前後の価格が取引履歴に残ります。それまでの取引は当時の価格のまま記録されます。</p>
+    <p class="note">原価合計は購入食材リストの20食版（83,059円）が初期値です。25食版なら66,852円にしてください。元が取れる食数は「原価合計 ÷ 販売価格」です。</p>
+    <p class="note">記録はこのタブレットのブラウザ内に保存されます。履歴を消去したり別の端末で開いたりすると引き継がれません。消去の前に「取引履歴」タブからCSVで保存してください。</p>
+    <p class="note">ホーム画面に追加すると、電波がなくてもアプリとして起動できます（初回だけ電波のある場所で開いてください）。</p>
+    <div id="resetArea"></div>
+  </div>
+</section>
+
+<nav class="tabs" aria-label="メニュー">
+  <button data-view="sell" aria-current="page"><svg viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="10" rx="2"/><rect x="6" y="4" width="12" height="6" rx="1.5"/><path d="M7 14h2M11 14h2M15 14h2"/></svg>販売</button>
+  <button data-view="hist"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>履歴</button>
+  <button data-view="close"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>精算</button>
+  <button data-view="set"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>設定</button>
+</nav>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const ITEMS={nashi:{name:"焼きそば（紅なし）",code:"YS-01"},ari:{name:"焼きそば（紅あり）",code:"YS-02"}};
+const KEY="yakisoba-register-v1";
+/* tx[].price: その取引の単価（旧データには無いので unitPrice() で補う）
+   priceLog[]: 価格変更の記録 {date,time,from,to,afterNo}。afterNo＝変更前に最後に会計した取引No. */
+let S={price:500,goal:1000,cost:83059,next:1,tx:[],priceLog:[]};
+try{const raw=localStorage.getItem(KEY);if(raw)S=Object.assign(S,JSON.parse(raw));}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+/* 端末ごとの好み（売上データとは別キー） */
+const PKEY="yakisoba-register-prefs";
+let P={sound:true};
+try{const raw=localStorage.getItem(PKEY);if(raw)P=Object.assign(P,JSON.parse(raw));}catch(e){}
+function savePrefs(){try{localStorage.setItem(PKEY,JSON.stringify(P));}catch(e){}}
+
+let cart={nashi:0,ari:0}, recv="", last=null; // recv: お預りの入力文字列 / last: 会計直後の取引（お釣り表示中）
+const $=id=>document.getElementById(id);
+const yen=n=>(n<0?"-":"")+"¥"+Math.abs(Math.round(n)).toLocaleString("ja-JP");
+const qty=()=>cart.nashi+cart.ari, total=()=>qty()*S.price, recvN=()=>Number(recv||0);
+const live=()=>S.tx.filter(t=>!t.void);
+function totals(){let a=0,b=0,s=0;live().forEach(t=>{a+=t.nashi;b+=t.ari;s+=t.total;});return{nashi:a,ari:b,all:a+b,sales:s};}
+const beCount=()=>S.price>0?Math.ceil(S.cost/S.price):0;
+const unitPrice=t=>t.price??((t.nashi+t.ari)?t.total/(t.nashi+t.ari):S.price);
+const today=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+
+/* 操作音とバイブ（にぎやかな会場でも押せたことが分かるように） */
+let ac;
+function beep(f=1900,d=.035){
+  if(P.sound)try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();
+    const o=ac.createOscillator(),g=ac.createGain();o.type="sine";o.frequency.value=f;g.gain.value=.06;
+    o.connect(g).connect(ac.destination);o.start();o.stop(ac.currentTime+d);}catch(e){}
+  try{navigator.vibrate&&navigator.vibrate(8);}catch(e){}
+}
+function chime(){beep(1600,.06);setTimeout(()=>beep(2400,.09),80);}
+
+/* 販売業務 */
+function newSale(){cart={nashi:0,ari:0};recv="";last=null;}
+function renderSell(){
+  const done=!!last, src=done?last:cart;
+  document.querySelectorAll(".tile").forEach(b=>{
+    const n=done?0:cart[b.dataset.id],c=b.querySelector(".cnt");
+    c.hidden=!n;c.textContent=n;b.querySelector(".pr").textContent=yen(S.price);
+  });
+  // 注文リスト
+  const ids=Object.keys(ITEMS).filter(k=>src[k]>0), n=ids.reduce((a,k)=>a+src[k],0);
+  $("oHead").innerHTML=done?`<span class="paid">No.${last.no} 会計済み</span>`:"注文";
+  $("btnClear").hidden=done||!n;
+  const box=$("lines");box.innerHTML="";
+  if(!ids.length)box.innerHTML='<div class="empty">商品をタップして注文を入れてください</div>';
+  ids.forEach(id=>{
+    const d=document.createElement("div");d.className="line";
+    const up=done?unitPrice(last):S.price;
+    d.innerHTML=`<div><div class="nm">${ITEMS[id].name}</div><div class="unit num">${yen(up)} × ${src[id]}</div></div><div class="amt num">${yen(up*src[id])}</div>`+
+      (done?"":`<div class="stepper"><button data-m="${id}" aria-label="1つ減らす">−</button><span class="q num">${src[id]}</span><button data-p="${id}" aria-label="1つ増やす">＋</button></div>`);
+    box.appendChild(d);
+  });
+  $("oQty").textContent=n?`合計（${n}点）`:"合計";
+  $("oTot").textContent=yen(done?last.total:total());
+  // お預り・会計
+  $("pay").hidden=$("bar").hidden=done;$("done").hidden=!done;
+  if(done){
+    $("dCh").textContent=yen(last.change);$("dTot").textContent=yen(last.total);$("dRecv").textContent=yen(last.recv);
+  }else{
+    const tot=total(),r=recvN(),ch=r-tot;
+    $("aRecv").textContent=yen(r);$("aRecv").classList.toggle("ph",!recv);
+    document.querySelectorAll("#pad button,#btnRecvClear").forEach(b=>b.disabled=!qty());
+    const res=$("result");res.classList.toggle("short",!!recv&&ch<0);
+    if(!qty()){$("rK").textContent="お釣り";$("rV").textContent="—";}
+    else if(!recv){$("rK").textContent="合計";$("rV").textContent=yen(tot);}
+    else{$("rK").textContent=ch<0?"不足":"お釣り";$("rV").textContent=yen(Math.abs(ch));}
+    const pay=$("btnPay");
+    pay.disabled=!qty()||(!!recv&&ch<0);
+    pay.textContent=!qty()?"会計する":!recv?"ちょうどで会計":ch<0?"金額が足りません":"会計する";
+  }
+  const t=totals();
+  $("sToday").textContent=`本日 ${t.all.toLocaleString()}食 ${yen(t.sales)}`;
+  $("txNo").textContent="No."+S.next;
+}
+function addItem(id){if(last)newSale();cart[id]++;beep();renderSell();}
+document.querySelector(".tiles").addEventListener("click",e=>{const b=e.target.closest(".tile");if(b)addItem(b.dataset.id);});
+$("lines").addEventListener("click",e=>{
+  const p=e.target.closest("[data-p]"),m=e.target.closest("[data-m]");if(!p&&!m)return;
+  if(p)cart[p.dataset.p]++;if(m)cart[m.dataset.m]=Math.max(0,cart[m.dataset.m]-1);
+  if(!qty())recv="";beep();renderSell();
+});
+$("btnClear").onclick=()=>{newSale();beep(1200);renderSell();};
+function keyIn(k){
+  if(last||!qty())return;
+  if(k==="bs")recv=recv.slice(0,-1);
+  else if(k==="clear")recv="";
+  else if(k==="exact")recv=String(total());
+  else if(/^\d+$/.test(k)){if((recv+k).length<=7)recv=(recv+k).replace(/^0+/,"");}
+  beep();renderSell();
+}
+$("pad").onclick=e=>{const b=e.target.closest("button");if(!b||b.disabled)return;
+  if(b.dataset.add){if(last||!qty())return;recv=String(Math.min(9999999,recvN()+Number(b.dataset.add)));beep();renderSell();}
+  else keyIn(b.dataset.k);};
+$("btnRecvClear").onclick=()=>keyIn("clear");
+function checkout(){
+  const tot=total();if(last||!qty())return;
+  if(!recv)recv=String(tot); // お預りを入れずに会計＝ちょうど
+  const r=recvN();if(r<tot)return;
+  const d=new Date();
+  const tx={no:S.next,time:d.toTimeString().slice(0,5),nashi:cart.nashi,ari:cart.ari,price:S.price,total:tot,recv:r,change:r-tot};
+  S.tx.push(tx);S.next++;save();last=tx;chime();renderSell();
+}
+$("btnPay").onclick=checkout;
+$("btnNext").onclick=()=>{newSale();beep();renderSell();};
+$("btnFix").onclick=()=>{
+  const t=last;t.void=true;save();
+  cart={nashi:t.nashi,ari:t.ari};recv=String(t.recv);last=null;beep(1200);renderSell();
+  toast(`No.${t.no} を取り消しました。会計をやり直してください`);
+};
+/* キーボード（PCで使うとき）：数字・Backspace・Enter=会計・Esc=お預りを消す */
+document.addEventListener("keydown",e=>{
+  if($("v-sell").hidden||e.target.matches("input"))return;
+  if(/^\d$/.test(e.key))keyIn(e.key);
+  else if(e.key==="Backspace")keyIn("bs");
+  else if(e.key==="Escape")keyIn("clear");
+  else if(e.key==="Enter"){e.preventDefault();last?$("btnNext").click():checkout();}
+});
+
+/* 取引履歴（取引と価格変更を起きた順に並べる） */
+function timeline(){
+  const out=[],evs=S.priceLog||[];
+  evs.filter(e=>e.afterNo<1).forEach(e=>out.push({ev:e}));
+  S.tx.forEach(t=>{out.push(t);evs.filter(e=>e.afterNo===t.no).forEach(e=>out.push({ev:e}));});
+  return out;
+}
+function renderHist(){
+  const b=$("histBody");b.innerHTML="";
+  const rows=timeline();
+  if(!rows.length){b.innerHTML='<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:32px">まだ取引がありません</td></tr>';return;}
+  rows.reverse().forEach(t=>{
+    const tr=document.createElement("tr");
+    if(t.ev){tr.className="ev";tr.innerHTML=`<td></td><td class="num">${t.ev.time}</td><td colspan="7">価格変更 <span class="num">${yen(t.ev.from)} → ${yen(t.ev.to)}</span></td>`;b.appendChild(tr);return;}
+    if(t.void)tr.className="void";
+    tr.innerHTML=`<td class="num">${t.no}</td><td class="num">${t.time}</td><td class="rt num">${yen(unitPrice(t))}</td><td class="rt num">${t.nashi}</td><td class="rt num">${t.ari}</td>
+      <td class="rt num">${yen(t.total)}</td><td class="rt num">${yen(t.recv)}</td><td class="rt num">${yen(t.change??(t.recv-t.total))}</td>
+      <td class="rt">${t.void?"取消済":`<button class="mini" data-void="${t.no}">取消</button>`}</td>`;
+    b.appendChild(tr);
+  });
+}
+$("histBody").onclick=e=>{const b=e.target.closest("button");if(!b)return;
+  if(b.dataset.void){b.textContent="本当に取消";b.classList.add("danger");b.dataset.sure=b.dataset.void;delete b.dataset.void;return;}
+  if(b.dataset.sure){const no=Number(b.dataset.sure);const t=S.tx.find(x=>x.no===no);if(t)t.void=true;save();
+    if(last&&last.no===no)newSale();renderHist();renderSell();toast("No."+no+" を取り消しました");}
+};
+
+/* 精算 */
+function byPrice(){
+  const m=new Map();
+  live().forEach(t=>{const p=unitPrice(t),o=m.get(p)||{price:p,n:0,sales:0};o.n+=t.nashi+t.ari;o.sales+=t.total;m.set(p,o);});
+  return [...m.values()].sort((a,b)=>b.price-a.price);
+}
+function renderClose(){
+  const t=totals(),be=beCount(),bp=byPrice();
+  $("byPrice").hidden=bp.length<2; // 価格を変えたときだけ単価別の内訳を出す
+  $("byPriceBody").innerHTML=bp.map(p=>`<tr><td class="num">${yen(p.price)}</td><td class="rt num">${p.n.toLocaleString()}食</td><td class="rt num">${yen(p.sales)}</td></tr>`).join("");
+  $("cNashi").textContent=t.nashi.toLocaleString()+"食";$("cAri").textContent=t.ari.toLocaleString()+"食";
+  $("cAll").textContent=t.all.toLocaleString()+"食";$("cSales").textContent=yen(t.sales);
+  $("cTx").textContent=live().length+"件";$("cProfit").textContent=yen(t.sales-S.cost);
+  const rate=t.all/S.goal*100;
+  $("cRate").textContent=Math.round(rate)+"%";
+  $("gFill").setAttribute("stroke-dasharray",`${Math.min(100,rate)} 100`);
+  $("gFill").setAttribute("visibility",t.all?"visible":"hidden"); // 0食のとき丸い端だけ点で残らないように
+  $("gCount").textContent=`${t.all.toLocaleString()} / ${S.goal.toLocaleString()}食`;
+  $("gSvg").setAttribute("aria-label",`目標達成率 ${Math.round(rate)}%（${t.all}食／${S.goal}食）`);
+  $("cBeLab").textContent="損益分岐 "+be.toLocaleString()+"食";$("cGoal").textContent=S.goal.toLocaleString()+"食";
+  $("cBreak").textContent=t.sales>=S.cost?"原価分の売上に届きました。":"元が取れるまで、あと "+Math.ceil((S.cost-t.sales)/(S.price||1)).toLocaleString()+"食です。";
+}
+
+/* 設定 */
+function renderSet(){$("curPrice").textContent=yen(S.price);priceEditing(false);$("iGoal").value=S.goal;$("iCost").value=S.cost;$("iSound").checked=P.sound;resetIdle();}
+/* 価格変更：うっかり変わらないよう「変更」→「変更する」の2段階。変更は priceLog に残す */
+function priceEditing(on){$("priceView").hidden=on;$("priceEdit").hidden=!on;if(on){$("iPrice").value=S.price;$("iPrice").focus();$("iPrice").select();}}
+$("btnPrice").onclick=()=>priceEditing(true);
+$("priceNo").onclick=()=>priceEditing(false);
+$("priceOk").onclick=()=>{
+  const v=Number($("iPrice").value);
+  if(!Number.isInteger(v)||v<1){toast("1円以上の金額を入れてください");return;}
+  if(v===S.price){priceEditing(false);return;}
+  const d=new Date();
+  S.priceLog.push({date:today(d),time:d.toTimeString().slice(0,5),from:S.price,to:v,afterNo:S.next-1});
+  const from=S.price;S.price=v;save();renderSell();renderSet();
+  toast(`価格を ${yen(from)} → ${yen(v)} に変更しました`);
+};
+$("iPrice").addEventListener("keydown",e=>{if(e.key==="Enter")$("priceOk").click();else if(e.key==="Escape")priceEditing(false);});
+[["iGoal","goal"],["iCost","cost"]].forEach(([id,k])=>$(id).addEventListener("change",()=>{
+  const v=Number($(id).value);if(v>=0&&!(k==="goal"&&v<1)){S[k]=v;save();renderSell();toast("保存しました");}}));
+$("iSound").onchange=()=>{P.sound=$("iSound").checked;savePrefs();beep();};
+function resetIdle(){$("resetArea").innerHTML='<button class="mini danger" id="rAsk">売上記録をすべて消去</button>';$("rAsk").onclick=resetAsk;}
+function resetAsk(){
+  $("resetArea").innerHTML='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="color:var(--danger)">すべての取引記録を消します。</span><button class="mini danger" id="rYes">消去する</button><button class="mini" id="rNo">やめる</button></div>';
+  $("rNo").onclick=resetIdle;$("rYes").onclick=()=>{S.tx=[];S.next=1;S.priceLog=[];save();newSale();renderSell();resetIdle();toast("取引記録を消去しました");};
+}
+
+/* タブ */
+const R={sell:renderSell,hist:renderHist,close:renderClose,set:renderSet};
+document.querySelector("nav.tabs").onclick=e=>{const b=e.target.closest("button");if(!b)return;
+  document.querySelectorAll("nav.tabs button").forEach(x=>x.removeAttribute("aria-current"));b.setAttribute("aria-current","page");
+  document.querySelectorAll(".view").forEach(v=>v.hidden=v.id!=="v-"+b.dataset.view);R[b.dataset.view]();};
+
+/* CSVエクスポート（Excelで文字化けしないようBOM付きUTF-8） */
+function exportCsv(){
+  if(!S.tx.length){toast("まだ取引がありません");return;}
+  const head=["No.","時刻","単価","紅なし","紅あり","合計","預り","お釣り","状態"];
+  const rows=timeline().map(t=>t.ev?["",t.ev.time,"","","","","","",`価格変更 ${t.ev.from}円→${t.ev.to}円`]
+    :[t.no,t.time,unitPrice(t),t.nashi,t.ari,t.total,t.recv,t.change??(t.recv-t.total),t.void?"取消":""]);
+  const sum=totals();
+  rows.push([],["集計（取消除く）"],["紅なし",sum.nashi],["紅あり",sum.ari],["合計食数",sum.all],["売上（現金）",sum.sales],["取引数",live().length],["原価合計",S.cost],["売上−原価",sum.sales-S.cost]);
+  rows.push([],["単価別（取消除く）"],["単価","食数","売上"],...byPrice().map(p=>[p.price,p.n,p.sales]));
+  if(S.priceLog.length)rows.push([],["価格変更履歴"],["日付","時刻","変更前","変更後","直前の取引No."],...S.priceLog.map(e=>[e.date,e.time,e.from,e.to,e.afterNo||"なし"]));
+  const esc=v=>{const s=String(v??"");return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
+  const csv="﻿"+[head,...rows].map(r=>r.map(esc).join(",")).join("\r\n")+"\r\n";
+  const d=new Date(),p=n=>String(n).padStart(2,"0");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download=`yakisoba_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.csv`;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  toast("CSVを保存しました");
+}
+document.querySelectorAll("[data-csv]").forEach(b=>b.onclick=exportCsv);
+
+let tt;function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2500);}
+function tick(){const d=new Date();$("clock").textContent=d.toLocaleDateString("ja-JP",{month:"numeric",day:"numeric",weekday:"short"})+" "+d.toTimeString().slice(0,5);}
+tick();setInterval(tick,15000);
+
+/* 画面スリープ防止（タブが裏に回ると解除されるので、戻ったときに取り直す） */
+function wake(){try{navigator.wakeLock&&navigator.wakeLock.request("screen").catch(()=>{});}catch(e){}}
+wake();document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")wake();});
+
+/* オフライン対応 */
+function net(){$("net").hidden=navigator.onLine;}
+net();addEventListener("online",net);addEventListener("offline",net);
+if("serviceWorker" in navigator&&location.protocol!=="file:")navigator.serviceWorker.register("sw.js").catch(()=>{});
+renderSell();
+</script>
+</body>
+</html>
