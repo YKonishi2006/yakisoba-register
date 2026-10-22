@@ -172,6 +172,14 @@ nav.tabs button{min-height:56px;padding:6px 4px;display:flex;flex-direction:colu
 nav.tabs button[aria-current="page"]{color:var(--accent)}
 nav.tabs svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 
+/* トレーニングモード：画面のふちを赤枠で囲み、上に赤い帯 */
+:root{--train:#d70015}
+body.training::after{content:"";position:fixed;inset:0;border:6px solid var(--train);pointer-events:none;z-index:50}
+.trbar{background:var(--train);color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  min-height:44px;padding-top:env(safe-area-inset-top,0px)}
+.trbar button{color:#fff;font-weight:700;border:1.5px solid rgba(255,255,255,.8);border-radius:10px;min-height:36px;padding:0 12px}
+body.training header{padding-top:0}
+.rowsub{display:block;color:var(--muted);font-size:13px}
 .toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);
   padding:12px 20px;border-radius:14px;font-weight:600;z-index:30;max-width:calc(100% - 32px);text-align:center}
 
@@ -198,6 +206,7 @@ nav.tabs svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1
 </head>
 <body>
 
+<div class="trbar gut" id="trBar" hidden><span>トレーニングモード中　売上には記録されません</span><button id="trGo">終了する</button></div>
 <header><div class="in gut">
   <h1>焼きそばレジ</h1>
   <div class="meta num"><span id="net" class="offline" hidden>オフライン</span><span class="today" id="sToday"></span><span id="txNo">No.1</span><span id="clock"></span></div>
@@ -293,6 +302,9 @@ nav.tabs svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1
   <div class="page gut">
     <h2>設定</h2>
     <div class="set">
+      <div class="row"><span>トレーニングモード<small class="rowsub" id="trSub"></small></span><span class="pv" id="trArea"></span></div>
+    </div>
+    <div class="set">
       <div class="row" id="priceView"><span>販売価格（1食・税込）</span><span class="pv"><b class="num" id="curPrice"></b><button class="mini" id="btnPrice">変更</button></span></div>
       <div class="row" id="priceEdit" hidden><label for="iPrice">新しい販売価格</label><span class="pv"><input id="iPrice" type="number" inputmode="numeric" min="1" step="10"><button class="mini" id="priceNo">やめる</button><button class="mini go" id="priceOk">変更する</button></span></div>
       <div class="row"><label for="iGoal">目標販売食数</label><input id="iGoal" type="number" inputmode="numeric" min="1"></div>
@@ -319,16 +331,22 @@ nav.tabs svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1
 <script>
 const ITEMS={nashi:{name:"焼きそば（紅なし）",code:"YS-01"},ari:{name:"焼きそば（紅あり）",code:"YS-02"}};
 const KEY="yakisoba-register-v1";
-/* tx[].price: その取引の単価（旧データには無いので unitPrice() で補う）
-   priceLog[]: 価格変更の記録 {date,time,from,to,afterNo}。afterNo＝変更前に最後に会計した取引No. */
-let S={price:500,goal:1000,cost:83059,next:1,tx:[],priceLog:[]};
-try{const raw=localStorage.getItem(KEY);if(raw)S=Object.assign(S,JSON.parse(raw));}catch(e){}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
-/* 端末ごとの好み（売上データとは別キー） */
+/* トレーニングモード中は別キーに保存し、本番の売上記録には一切触れない。終了するとこのキーごと消す */
+const TKEY="yakisoba-register-training";
+/* 端末ごとの好み（売上データとは別キー）。training: トレーニングモード中か */
 const PKEY="yakisoba-register-prefs";
-let P={sound:true};
+let P={sound:true,training:false};
 try{const raw=localStorage.getItem(PKEY);if(raw)P=Object.assign(P,JSON.parse(raw));}catch(e){}
 function savePrefs(){try{localStorage.setItem(PKEY,JSON.stringify(P));}catch(e){}}
+/* tx[].price: その取引の単価（旧データには無いので unitPrice() で補う）
+   priceLog[]: 価格変更の記録 {date,time,from,to,afterNo}。afterNo＝変更前に最後に会計した取引No. */
+function load(key){
+  const s={price:500,goal:1000,cost:83059,next:1,tx:[],priceLog:[]};
+  try{const raw=localStorage.getItem(key);if(raw)Object.assign(s,JSON.parse(raw));}catch(e){}
+  return s;
+}
+let S=load(P.training?TKEY:KEY);
+function save(){try{localStorage.setItem(P.training?TKEY:KEY,JSON.stringify(S));}catch(e){}}
 
 let cart={nashi:0,ari:0}, recv="", last=null; // recv: お預りの入力文字列 / last: 会計直後の取引（お釣り表示中）
 const $=id=>document.getElementById(id);
@@ -488,7 +506,7 @@ function renderClose(){
 }
 
 /* 設定 */
-function renderSet(){$("curPrice").textContent=yen(S.price);priceEditing(false);$("iGoal").value=S.goal;$("iCost").value=S.cost;$("iSound").checked=P.sound;resetIdle();}
+function renderSet(){renderTraining();$("curPrice").textContent=yen(S.price);priceEditing(false);$("iGoal").value=S.goal;$("iCost").value=S.cost;$("iSound").checked=P.sound;resetIdle();}
 /* 価格変更：うっかり変わらないよう「変更」→「変更する」の2段階。変更は priceLog に残す */
 function priceEditing(on){$("priceView").hidden=on;$("priceEdit").hidden=!on;if(on){$("iPrice").value=S.price;$("iPrice").focus();$("iPrice").select();}}
 $("btnPrice").onclick=()=>priceEditing(true);
@@ -519,6 +537,36 @@ document.querySelector("nav.tabs").onclick=e=>{const b=e.target.closest("button"
   document.querySelectorAll(".view").forEach(v=>v.hidden=v.id!=="v-"+b.dataset.view);R[b.dataset.view]();};
 
 /* CSVエクスポート（Excelで文字化けしないようBOM付きUTF-8） */
+/* トレーニングモード */
+function renderTraining(){
+  document.body.classList.toggle("training",P.training);
+  $("trBar").hidden=!P.training;
+  $("trSub").textContent=P.training?`練習の記録 ${S.tx.length}件。終了すると消えます`:"練習用。本番の売上記録には残りません";
+  $("trArea").innerHTML=P.training?'<button class="mini danger" id="trEnd">終了する</button>':'<button class="mini go" id="trStart">開始する</button>';
+  if(P.training)$("trEnd").onclick=trainingAsk;else $("trStart").onclick=trainingStart;
+}
+function trainingStart(){
+  // 価格・目標・原価は本番の設定を引き継ぎ、取引は空から
+  const base=load(KEY);
+  P.training=true;savePrefs();
+  S={price:base.price,goal:base.goal,cost:base.cost,next:1,tx:[],priceLog:[]};save();
+  newSale();renderAll();toast("トレーニングモードを開始しました");
+}
+function trainingAsk(){
+  $("trArea").innerHTML='<span style="color:var(--danger)">練習の記録を消して終了します。</span><button class="mini" id="trNo">やめる</button><button class="mini danger" id="trYes">終了する</button>';
+  $("trNo").onclick=renderTraining;
+  $("trYes").onclick=()=>{
+    try{localStorage.removeItem(TKEY);}catch(e){}
+    P.training=false;savePrefs();S=load(KEY);
+    newSale();renderAll();toast("トレーニングモードを終了しました。練習の記録は消えました");
+  };
+}
+$("trGo").onclick=()=>{document.querySelector('nav.tabs [data-view="set"]').click();trainingAsk();};
+function renderAll(){
+  renderTraining();renderSell();
+  const v=document.querySelector("nav.tabs [aria-current]").dataset.view;if(v!=="sell")R[v]();
+}
+
 function exportCsv(){
   if(!S.tx.length){toast("まだ取引がありません");return;}
   const head=["No.","時刻","単価","紅なし","紅あり","合計","預り","お釣り","状態"];
@@ -533,7 +581,7 @@ function exportCsv(){
   const d=new Date(),p=n=>String(n).padStart(2,"0");
   const a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
-  a.download=`yakisoba_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.csv`;
+  a.download=`${P.training?"training_":""}yakisoba_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.csv`;
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
   toast("CSVを保存しました");
 }
@@ -551,7 +599,7 @@ wake();document.addEventListener("visibilitychange",()=>{if(document.visibilityS
 function net(){$("net").hidden=navigator.onLine;}
 net();addEventListener("online",net);addEventListener("offline",net);
 if("serviceWorker" in navigator&&location.protocol!=="file:")navigator.serviceWorker.register("sw.js").catch(()=>{});
-renderSell();
+renderTraining();renderSell();
 </script>
 </body>
 </html>
