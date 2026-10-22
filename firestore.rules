@@ -1,0 +1,17 @@
+rules_version = '2';
+// Firebase コンソール → Firestore Database →「ルール」にこの内容を貼り付けて「公開」する。
+// 下のメールアドレスを、Authentication で作ったスタッフ用アカウントのものに置き換えること。
+// （複数入れる場合は ['a@example.com', 'b@example.com'] のように並べる）
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /stores/{store} {
+      allow read, write: if isStaff();
+      match /tx/{txId} {
+        allow read, write: if isStaff();
+      }
+    }
+    function isStaff() {
+      return request.auth != null && request.auth.token.email in ['staff@example.com'];
+    }
+  }
+}

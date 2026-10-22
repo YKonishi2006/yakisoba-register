@@ -1,12 +1,14 @@
 /* 焼きそばレジ Service Worker
    アプリ本体は「キャッシュ優先＋裏で更新」。電波が弱くても即起動し、次回起動時に新しい版へ切り替わる。
    index.html などを更新したら VERSION を上げること。 */
-const VERSION = "v7";
+const VERSION = "v8";
 const APP = "yakisoba-app-" + VERSION;
-const FONTS = "yakisoba-fonts";
+const LIB = "yakisoba-lib"; // Firebase SDK（URLに版が入っていて中身が変わらないので、版をまたいで残す）
 const SHELL = [
   "./",
   "./index.html",
+  "./cloud.js",
+  "./firebase-config.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",
   "./icons/icon-180.png",
@@ -21,7 +23,7 @@ self.addEventListener("install", e => {
 self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== APP && k !== FONTS).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k !== APP && k !== LIB).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -31,20 +33,21 @@ self.addEventListener("fetch", e => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
 
-  // Google Fonts：一度取れたらずっとキャッシュを使う
-  if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") {
+  // Firebase SDK：一度取れたらずっとキャッシュを使う（オフラインでもクラウド機能を起動できるように）
+  if (url.hostname === "www.gstatic.com" && url.pathname.startsWith("/firebasejs/")) {
     e.respondWith(
-      caches.open(FONTS).then(async c => {
+      caches.open(LIB).then(async c => {
         const hit = await c.match(req);
         if (hit) return hit;
         const res = await fetch(req);
-        if (res.ok || res.type === "opaque") c.put(req, res.clone());
+        if (res.ok) c.put(req, res.clone());
         return res;
       })
     );
     return;
   }
 
+  // Firestore・ログインの通信など、ほかのサイトへのリクエストは触らない
   if (url.origin !== location.origin) return;
 
   // アプリ本体：キャッシュを即返し、裏でネットから取り直す

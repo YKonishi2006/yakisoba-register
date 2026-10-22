@@ -179,7 +179,13 @@ body.training::after{content:"";position:fixed;inset:0;border:6px solid var(--tr
   min-height:44px;padding-top:env(safe-area-inset-top,0px)}
 .trbar button{color:#fff;font-weight:700;border:1.5px solid rgba(255,255,255,.8);border-radius:10px;min-height:36px;padding:0 12px}
 body.training header{padding-top:0}
-.rowsub{display:block;color:var(--muted);font-size:13px}
+.rowsub{display:block;color:var(--muted);font-size:13px;font-weight:400}
+/* クラウド保存 */
+.set .login{grid-template-columns:1fr 1fr auto;margin:0}
+.set .login input{font:inherit;min-width:0;padding:10px 12px;border-radius:10px;border:1.5px solid var(--sep);background:var(--bg);color:var(--fg)}
+.set input.regin{font:inherit;width:80px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--sep);background:var(--bg);color:var(--fg);text-align:center;font-weight:700;text-transform:uppercase}
+.cloud.synced{color:var(--nashi)} .cloud.pending,.cloud.offline,.cloud.signedOut{color:var(--muted)} .cloud.error{color:var(--danger);font-weight:600}
+@media (max-width:600px){.set .login{grid-template-columns:1fr}}
 .toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);
   padding:12px 20px;border-radius:14px;font-weight:600;z-index:30;max-width:calc(100% - 32px);text-align:center}
 
@@ -209,7 +215,7 @@ body.training header{padding-top:0}
 <div class="trbar gut" id="trBar" hidden><span>トレーニングモード中　売上には記録されません</span><button id="trGo">終了する</button></div>
 <header><div class="in gut">
   <h1>焼きそばレジ</h1>
-  <div class="meta num"><span id="net" class="offline" hidden>オフライン</span><span class="today" id="sToday"></span><span id="txNo">No.1</span><span id="clock"></span></div>
+  <div class="meta num"><span id="net" class="offline" hidden>オフライン</span><span id="cloudState" class="cloud" hidden></span><span class="today" id="sToday"></span><span id="txNo">No.1</span><span id="clock"></span></div>
 </div></header>
 
 <!-- 販売業務 -->
@@ -305,6 +311,15 @@ body.training header{padding-top:0}
       <div class="row"><span>トレーニングモード<small class="rowsub" id="trSub"></small></span><span class="pv" id="trArea"></span></div>
     </div>
     <div class="set">
+      <div class="row"><span>クラウド保存<small class="rowsub" id="cloudSub"></small></span><span class="pv" id="cloudArea"></span></div>
+      <form class="row login" id="loginRow" hidden>
+        <input id="iEmail" type="email" autocomplete="username" placeholder="メールアドレス" aria-label="メールアドレス">
+        <input id="iPw" type="password" autocomplete="current-password" placeholder="パスワード" aria-label="パスワード">
+        <button class="mini go" type="submit">ログイン</button>
+      </form>
+      <div class="row"><label for="iReg">この端末のレジ名<small class="rowsub">取引No.の頭に付きます。端末ごとに変えてください（A、B…）</small></label><input id="iReg" type="text" maxlength="3" autocapitalize="characters" class="regin"></div>
+    </div>
+    <div class="set">
       <div class="row" id="priceView"><span>販売価格（1食・税込）</span><span class="pv"><b class="num" id="curPrice"></b><button class="mini" id="btnPrice">変更</button></span></div>
       <div class="row" id="priceEdit" hidden><label for="iPrice">新しい販売価格</label><span class="pv"><input id="iPrice" type="number" inputmode="numeric" min="1" step="10"><button class="mini" id="priceNo">やめる</button><button class="mini go" id="priceOk">変更する</button></span></div>
       <div class="row"><label for="iGoal">目標販売食数</label><input id="iGoal" type="number" inputmode="numeric" min="1"></div>
@@ -313,7 +328,7 @@ body.training header{padding-top:0}
     </div>
     <p class="note">価格を変えると、変えた時刻と前後の価格が取引履歴に残ります。それまでの取引は当時の価格のまま記録されます。</p>
     <p class="note">原価合計は購入食材リストの20食版（83,059円）が初期値です。25食版なら66,852円にしてください。元が取れる食数は「原価合計 ÷ 販売価格」です。</p>
-    <p class="note">記録はこのタブレットのブラウザ内に保存されます。履歴を消去したり別の端末で開いたりすると引き継がれません。消去の前に「取引履歴」タブからCSVで保存してください。</p>
+    <p class="note">記録はこの端末の中に保存され、クラウド保存にログインしていれば自動でクラウドにも送られます。電波がないときは端末に貯めておき、つながったときに送ります。ログインしていない場合、別の端末には引き継がれないので、精算後に「取引履歴」タブからCSVで保存してください。</p>
     <p class="note">ホーム画面に追加すると、電波がなくてもアプリとして起動できます（初回だけ電波のある場所で開いてください）。</p>
     <div id="resetArea"></div>
   </div>
@@ -331,18 +346,21 @@ body.training header{padding-top:0}
 <script>
 const ITEMS={nashi:{name:"焼きそば（紅なし）",code:"YS-01"},ari:{name:"焼きそば（紅あり）",code:"YS-02"}};
 const KEY="yakisoba-register-v1";
-/* トレーニングモード中は別キーに保存し、本番の売上記録には一切触れない。終了するとこのキーごと消す */
+/* トレーニングモード中は別キーに保存し、本番の売上記録には一切触れない（クラウドにも送らない）。終了するとこのキーごと消す */
 const TKEY="yakisoba-register-training";
-/* 端末ごとの好み（売上データとは別キー）。training: トレーニングモード中か */
+/* 端末ごとの好み（売上データとは別キー）。training: トレーニングモード中か / reg: この端末のレジ名（取引No.の頭に付く） */
 const PKEY="yakisoba-register-prefs";
-let P={sound:true,training:false};
+let P={sound:true,training:false,reg:"A"};
 try{const raw=localStorage.getItem(PKEY);if(raw)P=Object.assign(P,JSON.parse(raw));}catch(e){}
 function savePrefs(){try{localStorage.setItem(PKEY,JSON.stringify(P));}catch(e){}}
-/* tx[].price: その取引の単価（旧データには無いので unitPrice() で補う）
-   priceLog[]: 価格変更の記録 {date,time,from,to,afterNo}。afterNo＝変更前に最後に会計した取引No. */
+/* tx[]: {id:"A-12",reg:"A",no:12,at:ミリ秒,date,time,nashi,ari,price,total,recv,change,void,synced}
+     id はレジ名＋番号なので、複数の端末で同時に会計しても重ならない。synced はこの端末だけの印（クラウドに送ったか）
+   priceLog[]: 価格変更の記録 {at,date,time,from,to}（旧データは afterNo＝直前の取引No.） */
 function load(key){
-  const s={price:500,goal:1000,cost:83059,next:1,tx:[],priceLog:[]};
+  const s={price:500,goal:1000,cost:83059,tx:[],priceLog:[]};
   try{const raw=localStorage.getItem(key);if(raw)Object.assign(s,JSON.parse(raw));}catch(e){}
+  // 旧データ（レジ名・IDなし）は、この端末のレジ名で番号を付け直さずにIDだけ与える
+  s.tx.forEach(t=>{if(!t.reg)t.reg=P.reg;if(!t.id)t.id=`${t.reg}-${t.no}`;});
   return s;
 }
 let S=load(P.training?TKEY:KEY);
@@ -357,6 +375,14 @@ function totals(){let a=0,b=0,s=0;live().forEach(t=>{a+=t.nashi;b+=t.ari;s+=t.to
 const beCount=()=>S.price>0?Math.ceil(S.cost/S.price):0;
 const unitPrice=t=>t.price??((t.nashi+t.ari)?t.total/(t.nashi+t.ari):S.price);
 const today=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const label=t=>`${t.reg}-${t.no}`;
+const nextNo=()=>S.tx.reduce((m,t)=>t.reg===P.reg?Math.max(m,t.no):m,0)+1;
+
+/* クラウド（cloud.js が window.Cloud を用意する）。トレーニング中とログイン前は送らない
+   ログイン前の取引は synced:false のまま残り、ログイン後に自動で送られる */
+const cloudOn=()=>!P.training&&!!(window.Cloud&&Cloud.ready());
+function cloud(fn,...a){if(cloudOn())Cloud[fn](...a);}
+function putTx(t){if(cloudOn()){t.synced=true;Cloud.putTx(t);}else t.synced=false;}
 
 /* 操作音とバイブ（にぎやかな会場でも押せたことが分かるように） */
 let ac;
@@ -378,7 +404,7 @@ function renderSell(){
   });
   // 注文リスト
   const ids=Object.keys(ITEMS).filter(k=>src[k]>0), n=ids.reduce((a,k)=>a+src[k],0);
-  $("oHead").innerHTML=done?`<span class="paid">No.${last.no} 会計済み</span>`:"注文";
+  $("oHead").innerHTML=done?`<span class="paid">No.${label(last)} 会計済み</span>`:"注文";
   $("btnClear").hidden=done||!n;
   const box=$("lines");box.innerHTML="";
   if(!ids.length)box.innerHTML='<div class="empty">商品をタップして注文を入れてください</div>';
@@ -409,7 +435,7 @@ function renderSell(){
   }
   const t=totals();
   $("sToday").textContent=`本日 ${t.all.toLocaleString()}食 ${yen(t.sales)}`;
-  $("txNo").textContent="No."+S.next;
+  $("txNo").textContent=`No.${P.reg}-${nextNo()}`;
 }
 function addItem(id){if(last)newSale();cart[id]++;beep();renderSell();}
 document.querySelector(".tiles").addEventListener("click",e=>{const b=e.target.closest(".tile");if(b)addItem(b.dataset.id);});
@@ -435,16 +461,17 @@ function checkout(){
   const tot=total();if(last||!qty())return;
   if(!recv)recv=String(tot); // お預りを入れずに会計＝ちょうど
   const r=recvN();if(r<tot)return;
-  const d=new Date();
-  const tx={no:S.next,time:d.toTimeString().slice(0,5),nashi:cart.nashi,ari:cart.ari,price:S.price,total:tot,recv:r,change:r-tot};
-  S.tx.push(tx);S.next++;save();last=tx;chime();renderSell();
+  const d=new Date(),no=nextNo();
+  const tx={id:`${P.reg}-${no}`,reg:P.reg,no,at:d.getTime(),date:today(d),time:d.toTimeString().slice(0,5),
+    nashi:cart.nashi,ari:cart.ari,price:S.price,total:tot,recv:r,change:r-tot};
+  putTx(tx);S.tx.push(tx);save();last=tx;chime();renderSell();
 }
 $("btnPay").onclick=checkout;
 $("btnNext").onclick=()=>{newSale();beep();renderSell();};
 $("btnFix").onclick=()=>{
-  const t=last;t.void=true;save();
+  const t=S.tx.find(x=>x.id===last.id)||last;t.void=true;putTx(t);save();
   cart={nashi:t.nashi,ari:t.ari};recv=String(t.recv);last=null;beep(1200);renderSell();
-  toast(`No.${t.no} を取り消しました。会計をやり直してください`);
+  toast(`No.${label(t)} を取り消しました。会計をやり直してください`);
 };
 /* キーボード（PCで使うとき）：数字・Backspace・Enter=会計・Esc=お預りを消す */
 document.addEventListener("keydown",e=>{
@@ -455,12 +482,10 @@ document.addEventListener("keydown",e=>{
   else if(e.key==="Enter"){e.preventDefault();last?$("btnNext").click():checkout();}
 });
 
-/* 取引履歴（取引と価格変更を起きた順に並べる） */
+/* 取引履歴（取引と価格変更を起きた順に並べる。旧データは時刻が無いので番号順） */
 function timeline(){
-  const out=[],evs=S.priceLog||[];
-  evs.filter(e=>e.afterNo<1).forEach(e=>out.push({ev:e}));
-  S.tx.forEach(t=>{out.push(t);evs.filter(e=>e.afterNo===t.no).forEach(e=>out.push({ev:e}));});
-  return out;
+  const k=x=>x.ev?(x.ev.at??((x.ev.afterNo||0)+.5)):(x.at??x.no);
+  return [...S.tx,...(S.priceLog||[]).map(e=>({ev:e}))].sort((a,b)=>k(a)-k(b));
 }
 function renderHist(){
   const b=$("histBody");b.innerHTML="";
@@ -470,16 +495,16 @@ function renderHist(){
     const tr=document.createElement("tr");
     if(t.ev){tr.className="ev";tr.innerHTML=`<td></td><td class="num">${t.ev.time}</td><td colspan="7">価格変更 <span class="num">${yen(t.ev.from)} → ${yen(t.ev.to)}</span></td>`;b.appendChild(tr);return;}
     if(t.void)tr.className="void";
-    tr.innerHTML=`<td class="num">${t.no}</td><td class="num">${t.time}</td><td class="rt num">${yen(unitPrice(t))}</td><td class="rt num">${t.nashi}</td><td class="rt num">${t.ari}</td>
+    tr.innerHTML=`<td class="num">${label(t)}</td><td class="num">${t.time}</td><td class="rt num">${yen(unitPrice(t))}</td><td class="rt num">${t.nashi}</td><td class="rt num">${t.ari}</td>
       <td class="rt num">${yen(t.total)}</td><td class="rt num">${yen(t.recv)}</td><td class="rt num">${yen(t.change??(t.recv-t.total))}</td>
-      <td class="rt">${t.void?"取消済":`<button class="mini" data-void="${t.no}">取消</button>`}</td>`;
+      <td class="rt">${t.void?"取消済":`<button class="mini" data-void="${t.id}">取消</button>`}</td>`;
     b.appendChild(tr);
   });
 }
 $("histBody").onclick=e=>{const b=e.target.closest("button");if(!b)return;
   if(b.dataset.void){b.textContent="本当に取消";b.classList.add("danger");b.dataset.sure=b.dataset.void;delete b.dataset.void;return;}
-  if(b.dataset.sure){const no=Number(b.dataset.sure);const t=S.tx.find(x=>x.no===no);if(t)t.void=true;save();
-    if(last&&last.no===no)newSale();renderHist();renderSell();toast("No."+no+" を取り消しました");}
+  if(b.dataset.sure){const id=b.dataset.sure,t=S.tx.find(x=>x.id===id);if(!t)return;t.void=true;putTx(t);save();
+    if(last&&last.id===id)newSale();renderHist();renderSell();toast(`No.${label(t)} を取り消しました`);}
 };
 
 /* 精算 */
@@ -506,7 +531,8 @@ function renderClose(){
 }
 
 /* 設定 */
-function renderSet(){renderTraining();$("curPrice").textContent=yen(S.price);priceEditing(false);$("iGoal").value=S.goal;$("iCost").value=S.cost;$("iSound").checked=P.sound;resetIdle();}
+function renderSet(){renderTraining();renderCloud();$("curPrice").textContent=yen(S.price);priceEditing(false);
+  $("iGoal").value=S.goal;$("iCost").value=S.cost;$("iReg").value=P.reg;$("iSound").checked=P.sound;resetIdle();}
 /* 価格変更：うっかり変わらないよう「変更」→「変更する」の2段階。変更は priceLog に残す */
 function priceEditing(on){$("priceView").hidden=on;$("priceEdit").hidden=!on;if(on){$("iPrice").value=S.price;$("iPrice").focus();$("iPrice").select();}}
 $("btnPrice").onclick=()=>priceEditing(true);
@@ -515,20 +541,71 @@ $("priceOk").onclick=()=>{
   const v=Number($("iPrice").value);
   if(!Number.isInteger(v)||v<1){toast("1円以上の金額を入れてください");return;}
   if(v===S.price){priceEditing(false);return;}
-  const d=new Date();
-  S.priceLog.push({date:today(d),time:d.toTimeString().slice(0,5),from:S.price,to:v,afterNo:S.next-1});
-  const from=S.price;S.price=v;save();renderSell();renderSet();
-  toast(`価格を ${yen(from)} → ${yen(v)} に変更しました`);
+  const d=new Date(),ev={at:d.getTime(),date:today(d),time:d.toTimeString().slice(0,5),from:S.price,to:v};
+  S.priceLog.push(ev);S.price=v;save();cloud("addPrice",v,ev);renderSell();renderSet();
+  toast(`価格を ${yen(ev.from)} → ${yen(v)} に変更しました`);
 };
 $("iPrice").addEventListener("keydown",e=>{if(e.key==="Enter")$("priceOk").click();else if(e.key==="Escape")priceEditing(false);});
 [["iGoal","goal"],["iCost","cost"]].forEach(([id,k])=>$(id).addEventListener("change",()=>{
-  const v=Number($(id).value);if(v>=0&&!(k==="goal"&&v<1)){S[k]=v;save();renderSell();toast("保存しました");}}));
+  const v=Number($(id).value);if(v>=0&&!(k==="goal"&&v<1)){S[k]=v;save();cloud("setSettings",{[k]:v});renderSell();toast("保存しました");}}));
+$("iReg").addEventListener("change",()=>{
+  const v=$("iReg").value.trim().toUpperCase();
+  if(!/^[A-Z0-9]{1,3}$/.test(v)){toast("レジ名は英数字1〜3文字にしてください");$("iReg").value=P.reg;return;}
+  P.reg=v;savePrefs();renderSell();toast(`この端末のレジ名を ${v} にしました`);
+});
 $("iSound").onchange=()=>{P.sound=$("iSound").checked;savePrefs();beep();};
 function resetIdle(){$("resetArea").innerHTML='<button class="mini danger" id="rAsk">売上記録をすべて消去</button>';$("rAsk").onclick=resetAsk;}
 function resetAsk(){
-  $("resetArea").innerHTML='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="color:var(--danger)">すべての取引記録を消します。</span><button class="mini danger" id="rYes">消去する</button><button class="mini" id="rNo">やめる</button></div>';
-  $("rNo").onclick=resetIdle;$("rYes").onclick=()=>{S.tx=[];S.next=1;S.priceLog=[];save();newSale();renderSell();resetIdle();toast("取引記録を消去しました");};
+  const msg=cloudOn()?"すべての端末とクラウドの取引記録を消します。":"すべての取引記録を消します。";
+  $("resetArea").innerHTML=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="color:var(--danger)">${msg}</span><button class="mini danger" id="rYes">消去する</button><button class="mini" id="rNo">やめる</button></div>`;
+  $("rNo").onclick=resetIdle;$("rYes").onclick=()=>{S.tx=[];S.priceLog=[];save();cloud("resetAll");newSale();renderSell();resetIdle();toast("取引記録を消去しました");};
 }
+
+/* クラウド保存の表示とログイン */
+let CS={state:"off",email:"",msg:""}; // off: 未設定 / loading / signedOut / synced / pending / offline / error
+const CLOUD_TEXT={loading:"接続中…",signedOut:"未ログイン",synced:"クラウド同期済み",pending:"クラウド未送信あり",offline:"オフライン（つながったら送信）",error:"クラウドエラー"};
+function renderCloud(){
+  const on=CS.state!=="off";
+  $("cloudState").hidden=!on||P.training;
+  $("cloudState").textContent=CLOUD_TEXT[CS.state]||"";
+  $("cloudState").className="cloud "+CS.state;
+  {
+    $("cloudSub").textContent=!on?"未設定（firebase-config.js に設定を入れると使えます）"
+      :CS.state==="signedOut"?"ログインすると、すべての端末で同じ記録を使えます"
+      :CS.state==="error"?CS.msg
+      :`${CS.email}　${CLOUD_TEXT[CS.state]||""}`;
+    $("cloudArea").innerHTML=on&&!["signedOut","loading"].includes(CS.state)?'<button class="mini" id="btnLogout">ログアウト</button>':"";
+    if($("btnLogout"))$("btnLogout").onclick=()=>Cloud.signOut();
+    $("loginRow").hidden=CS.state!=="signedOut";
+  }
+}
+$("loginRow").onsubmit=e=>{
+  e.preventDefault();
+  const email=$("iEmail").value.trim(),pw=$("iPw").value;
+  if(!email||!pw){toast("メールアドレスとパスワードを入れてください");return;}
+  Cloud.signIn(email,pw).then(()=>{$("iPw").value="";toast("ログインしました");}).catch(err=>{
+    const c=err&&err.code||"";
+    toast(c.includes("network")?"電波のある場所でログインしてください":c.includes("invalid")||c.includes("wrong")||c.includes("user-not-found")?"メールアドレスかパスワードが違います":"ログインできませんでした（"+c+"）");
+  });
+};
+/* cloud.js から呼ばれる */
+window.Reg={
+  onCloudStatus(state,info={}){CS={state,email:info.email??CS.email,msg:info.msg||""};renderCloud();},
+  /* クラウドの内容で記録を置き換える。まだ送っていない取引（synced:false）は消さずにクラウドへ送る */
+  onCloudData(settings,txs){
+    const base=P.training?load(KEY):S;
+    const ids=new Set(txs.map(t=>t.id));
+    const pending=base.tx.filter(t=>!t.synced&&!ids.has(t.id));
+    pending.forEach(t=>{t.synced=true;Cloud.putTx(t);});
+    base.tx=[...txs.map(t=>({...t,synced:true})),...pending].sort((a,b)=>(a.at??a.no)-(b.at??b.no));
+    if(settings){base.price=settings.price??base.price;base.goal=settings.goal??base.goal;base.cost=settings.cost??base.cost;base.priceLog=settings.priceLog??[];}
+    else Cloud.setSettings({price:base.price,goal:base.goal,cost:base.cost,priceLog:base.priceLog}); // クラウドが空なら、この端末の設定を初期値として送る
+    if(P.training){try{localStorage.setItem(KEY,JSON.stringify(base));}catch(e){}return;}
+    S=base;save();renderSell();
+    const v=document.querySelector("nav.tabs [aria-current]").dataset.view;
+    if(v==="hist")renderHist();else if(v==="close")renderClose();else if(v==="set"){$("curPrice").textContent=yen(S.price);renderTraining();}
+  }
+};
 
 /* タブ */
 const R={sell:renderSell,hist:renderHist,close:renderClose,set:renderSet};
@@ -536,20 +613,20 @@ document.querySelector("nav.tabs").onclick=e=>{const b=e.target.closest("button"
   document.querySelectorAll("nav.tabs button").forEach(x=>x.removeAttribute("aria-current"));b.setAttribute("aria-current","page");
   document.querySelectorAll(".view").forEach(v=>v.hidden=v.id!=="v-"+b.dataset.view);R[b.dataset.view]();};
 
-/* CSVエクスポート（Excelで文字化けしないようBOM付きUTF-8） */
 /* トレーニングモード */
 function renderTraining(){
   document.body.classList.toggle("training",P.training);
   $("trBar").hidden=!P.training;
-  $("trSub").textContent=P.training?`練習の記録 ${S.tx.length}件。終了すると消えます`:"練習用。本番の売上記録には残りません";
+  $("trSub").textContent=P.training?`練習の記録 ${S.tx.length}件。終了すると消えます`:"練習用。本番の売上記録やクラウドには残りません";
   $("trArea").innerHTML=P.training?'<button class="mini danger" id="trEnd">終了する</button>':'<button class="mini go" id="trStart">開始する</button>';
   if(P.training)$("trEnd").onclick=trainingAsk;else $("trStart").onclick=trainingStart;
+  renderCloud();
 }
 function trainingStart(){
   // 価格・目標・原価は本番の設定を引き継ぎ、取引は空から
   const base=load(KEY);
   P.training=true;savePrefs();
-  S={price:base.price,goal:base.goal,cost:base.cost,next:1,tx:[],priceLog:[]};save();
+  S={price:base.price,goal:base.goal,cost:base.cost,tx:[],priceLog:[]};save();
   newSale();renderAll();toast("トレーニングモードを開始しました");
 }
 function trainingAsk(){
@@ -567,15 +644,16 @@ function renderAll(){
   const v=document.querySelector("nav.tabs [aria-current]").dataset.view;if(v!=="sell")R[v]();
 }
 
+/* CSVエクスポート（Excelで文字化けしないようBOM付きUTF-8） */
 function exportCsv(){
   if(!S.tx.length){toast("まだ取引がありません");return;}
-  const head=["No.","時刻","単価","紅なし","紅あり","合計","預り","お釣り","状態"];
-  const rows=timeline().map(t=>t.ev?["",t.ev.time,"","","","","","",`価格変更 ${t.ev.from}円→${t.ev.to}円`]
-    :[t.no,t.time,unitPrice(t),t.nashi,t.ari,t.total,t.recv,t.change??(t.recv-t.total),t.void?"取消":""]);
+  const head=["No.","日付","時刻","単価","紅なし","紅あり","合計","預り","お釣り","状態"];
+  const rows=timeline().map(t=>t.ev?["",t.ev.date||"",t.ev.time,"","","","","","",`価格変更 ${t.ev.from}円→${t.ev.to}円`]
+    :[label(t),t.date||"",t.time,unitPrice(t),t.nashi,t.ari,t.total,t.recv,t.change??(t.recv-t.total),t.void?"取消":""]);
   const sum=totals();
   rows.push([],["集計（取消除く）"],["紅なし",sum.nashi],["紅あり",sum.ari],["合計食数",sum.all],["売上（現金）",sum.sales],["取引数",live().length],["原価合計",S.cost],["売上−原価",sum.sales-S.cost]);
   rows.push([],["単価別（取消除く）"],["単価","食数","売上"],...byPrice().map(p=>[p.price,p.n,p.sales]));
-  if(S.priceLog.length)rows.push([],["価格変更履歴"],["日付","時刻","変更前","変更後","直前の取引No."],...S.priceLog.map(e=>[e.date,e.time,e.from,e.to,e.afterNo||"なし"]));
+  if(S.priceLog.length)rows.push([],["価格変更履歴"],["日付","時刻","変更前","変更後"],...S.priceLog.map(e=>[e.date,e.time,e.from,e.to]));
   const esc=v=>{const s=String(v??"");return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
   const csv="﻿"+[head,...rows].map(r=>r.map(esc).join(",")).join("\r\n")+"\r\n";
   const d=new Date(),p=n=>String(n).padStart(2,"0");
@@ -601,5 +679,6 @@ net();addEventListener("online",net);addEventListener("offline",net);
 if("serviceWorker" in navigator&&location.protocol!=="file:")navigator.serviceWorker.register("sw.js").catch(()=>{});
 renderTraining();renderSell();
 </script>
+<script type="module" src="cloud.js"></script>
 </body>
 </html>
