@@ -44,7 +44,7 @@ button:disabled{cursor:default}
 
 header{background:var(--panel);border-bottom:1px solid var(--sep);padding-top:env(safe-area-inset-top,0px)}
 header .in{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:52px}
-header h1{font-size:17px;font-weight:700;margin:0}
+header h1{font-size:17px;font-weight:700;margin:0;white-space:nowrap;flex:none}
 header .meta{color:var(--muted);font-size:15px;display:flex;gap:16px;white-space:nowrap;overflow:hidden}
 .offline{color:var(--danger);font-weight:600}
 
@@ -64,10 +64,10 @@ header .meta{color:var(--muted);font-size:15px;display:flex;gap:16px;white-space
 
 .tiles{grid-area:tiles;display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .tile{position:relative;background:var(--panel);border:1px solid var(--sep);border-bottom:6px solid var(--c);border-radius:14px;
-  min-height:clamp(108px,17vh,150px);padding:14px 18px;display:flex;flex-direction:column;justify-content:flex-end;text-align:left}
+  min-height:clamp(120px,24vh,220px);padding:14px 18px;display:flex;flex-direction:column;justify-content:flex-end;text-align:left}
 .tile:active{background:var(--press)}
 .tile .kind{font-size:15px;color:var(--muted)}
-.tile .nm{font-size:30px;font-weight:700;line-height:1.2}
+.tile .nm{font-size:clamp(30px,3.4vw,40px);font-weight:700;line-height:1.2}
 .tile .pr{font-size:17px;color:var(--muted)}
 .tile .cnt{position:absolute;top:12px;right:12px;min-width:40px;height:40px;padding:0 10px;border-radius:20px;background:var(--c);color:var(--badge-ink);
   display:grid;place-items:center;font-size:20px;font-weight:700}
@@ -159,12 +159,29 @@ tr.void td{color:var(--muted);text-decoration:line-through}
 .set .row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:10px 16px;min-height:56px;border-bottom:1px solid var(--sep)}
 .set .row:last-child{border-bottom:0}
 .set input[type=number]{font:inherit;width:140px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--sep);background:var(--bg);color:var(--fg);text-align:right}
-.set input[type=checkbox]{width:28px;height:28px;accent-color:var(--accent)}
 .set .pv{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .set .pv b{font-size:20px}
 .mini.go{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 tr.ev td{color:var(--accent);font-weight:600;background:var(--accent-soft)}
 .note{color:var(--muted);font-size:15px;line-height:1.6;margin:0}
+/* 設定：iOSのグループ表示（見出し・行のかたまり・説明文） */
+.group{display:flex;flex-direction:column;gap:6px;max-width:760px}
+.sh{margin:6px 0 0 16px;font-size:13px;font-weight:600;color:var(--muted)}
+.sf{margin:0 16px;font-size:13px;line-height:1.55;color:var(--muted)}
+.set .row>label,.set .row>span:first-child{font-size:17px}
+/* スイッチ（チェックボックスを見た目だけ切り替え） */
+input.switch{appearance:none;-webkit-appearance:none;width:51px;height:31px;border-radius:16px;background:var(--press);position:relative;cursor:pointer;
+  transition:background .2s;flex:none;margin:0}
+input.switch::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.25);transition:transform .2s}
+input.switch:checked{background:var(--accent)}
+input.switch:checked::after{transform:translateX(20px)}
+input.switch:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){input.switch,input.switch::after{transition:none}}
+/* 消去は行いっぱいの赤い文字ボタン */
+.danger-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.danger-row .wide{flex:1;min-height:44px;text-align:left;color:var(--danger);font-size:17px}
+.danger-row .wide:active{opacity:.6}
+.danger-row .mini{flex:none}
 
 nav.tabs{background:var(--panel);border-top:1px solid var(--sep);display:grid;grid-template-columns:repeat(4,1fr);
   padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
@@ -205,7 +222,16 @@ body.training header{padding-top:0}
   .done{grid-area:pay / pay / bar / bar}
   .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+/* 履歴：スマホ幅では単価・預り・お釣りを隠して横スクロールなしで読めるように */
+@media (max-width:600px){
+  .opt{display:none}
+  td,th{padding:12px 6px;font-size:15px}
+  td:first-child,th:first-child{padding-left:12px}
+  td:last-child,th:last-child{padding-right:6px}
+  #histBody .mini{padding:0 10px}
+}
 @media (max-width:420px){
+  header .meta #clock{display:none}
   header .meta .today{display:none}
 }
 </style>
@@ -265,7 +291,7 @@ body.training header{padding-top:0}
   <div class="page gut">
     <div class="ph"><h2>取引履歴</h2><button class="mini" data-csv>CSVで保存</button></div>
     <div class="tw"><table>
-      <thead><tr><th>No.</th><th>時刻</th><th class="rt">単価</th><th class="rt">紅なし</th><th class="rt">紅あり</th><th class="rt">合計</th><th class="rt">預り</th><th class="rt">お釣り</th><th></th></tr></thead>
+      <thead><tr><th>No.</th><th>時刻</th><th class="rt opt">単価</th><th class="rt">紅なし</th><th class="rt">紅あり</th><th class="rt">合計</th><th class="rt opt">預り</th><th class="rt opt">お釣り</th><th></th></tr></thead>
       <tbody id="histBody"></tbody>
     </table></div>
     <p class="note">取消した取引は線で消され、集計から外れます。</p>
@@ -307,30 +333,46 @@ body.training header{padding-top:0}
 <section class="view" id="v-set" hidden>
   <div class="page gut">
     <h2>設定</h2>
-    <div class="set">
-      <div class="row"><span>トレーニングモード<small class="rowsub" id="trSub"></small></span><span class="pv" id="trArea"></span></div>
+
+    <div class="group">
+      <h3 class="sh">この端末</h3>
+      <div class="set">
+        <div class="row"><span>トレーニングモード<small class="rowsub" id="trSub"></small></span><span class="pv" id="trArea"></span></div>
+        <div class="row"><label for="iReg">レジ名</label><input id="iReg" type="text" maxlength="3" autocapitalize="characters" class="regin"></div>
+        <div class="row"><label for="iSound">キーを押したときの音</label><input id="iSound" type="checkbox" class="switch" role="switch"></div>
+      </div>
+      <p class="sf">レジ名は取引No.の頭に付きます（例：A-12）。端末ごとに A、B…と変えてください。端末を替えたときは同じレジ名にすると番号が続きます。</p>
     </div>
-    <div class="set">
-      <div class="row"><span>クラウド保存<small class="rowsub" id="cloudSub"></small></span><span class="pv" id="cloudArea"></span></div>
-      <form class="row login" id="loginRow" hidden>
-        <input id="iEmail" type="email" autocomplete="username" placeholder="メールアドレス" aria-label="メールアドレス">
-        <input id="iPw" type="password" autocomplete="current-password" placeholder="パスワード" aria-label="パスワード">
-        <button class="mini go" type="submit">ログイン</button>
-      </form>
-      <div class="row"><label for="iReg">この端末のレジ名<small class="rowsub">取引No.の頭に付きます。端末ごとに変えてください（A、B…）</small></label><input id="iReg" type="text" maxlength="3" autocapitalize="characters" class="regin"></div>
+
+    <div class="group">
+      <h3 class="sh">クラウド保存</h3>
+      <div class="set">
+        <div class="row"><span><span id="cloudTitle">状態</span><small class="rowsub" id="cloudSub"></small></span><span class="pv" id="cloudArea"></span></div>
+        <form class="row login" id="loginRow" hidden>
+          <input id="iEmail" type="email" autocomplete="username" placeholder="メールアドレス" aria-label="メールアドレス">
+          <input id="iPw" type="password" autocomplete="current-password" placeholder="パスワード" aria-label="パスワード">
+          <button class="mini go" type="submit">ログイン</button>
+        </form>
+      </div>
+      <p class="sf">ログインした端末どうしで同じ記録を使えます。電波がないときは端末に貯めておき、つながったときに送ります。</p>
     </div>
-    <div class="set">
-      <div class="row" id="priceView"><span>販売価格（1食・税込）</span><span class="pv"><b class="num" id="curPrice"></b><button class="mini" id="btnPrice">変更</button></span></div>
-      <div class="row" id="priceEdit" hidden><label for="iPrice">新しい販売価格</label><span class="pv"><input id="iPrice" type="number" inputmode="numeric" min="1" step="10"><button class="mini" id="priceNo">やめる</button><button class="mini go" id="priceOk">変更する</button></span></div>
-      <div class="row"><label for="iGoal">目標販売食数</label><input id="iGoal" type="number" inputmode="numeric" min="1"></div>
-      <div class="row"><label for="iCost">原価合計（円）</label><input id="iCost" type="number" inputmode="numeric" min="0"></div>
-      <div class="row"><label for="iSound">キーを押したときの音</label><input id="iSound" type="checkbox"></div>
+
+    <div class="group">
+      <h3 class="sh">販売の設定（すべての端末で共通）</h3>
+      <div class="set">
+        <div class="row" id="priceView"><span>販売価格（1食・税込）</span><span class="pv"><b class="num" id="curPrice"></b><button class="mini" id="btnPrice">変更</button></span></div>
+        <div class="row" id="priceEdit" hidden><label for="iPrice">新しい販売価格</label><span class="pv"><input id="iPrice" type="number" inputmode="numeric" min="1" step="10"><button class="mini" id="priceNo">やめる</button><button class="mini go" id="priceOk">変更する</button></span></div>
+        <div class="row"><label for="iGoal">目標販売食数</label><input id="iGoal" type="number" inputmode="numeric" min="1"></div>
+        <div class="row"><label for="iCost">原価合計（円）</label><input id="iCost" type="number" inputmode="numeric" min="0"></div>
+      </div>
+      <p class="sf">価格を変えると、変えた時刻と前後の価格が取引履歴に残ります。それまでの取引は当時の価格のままです。原価合計の初期値は購入食材リストの20食版（83,059円）で、25食版なら66,852円にしてください。</p>
     </div>
-    <p class="note">価格を変えると、変えた時刻と前後の価格が取引履歴に残ります。それまでの取引は当時の価格のまま記録されます。</p>
-    <p class="note">原価合計は購入食材リストの20食版（83,059円）が初期値です。25食版なら66,852円にしてください。元が取れる食数は「原価合計 ÷ 販売価格」です。</p>
-    <p class="note">記録はこの端末の中に保存され、クラウド保存にログインしていれば自動でクラウドにも送られます。電波がないときは端末に貯めておき、つながったときに送ります。ログインしていない場合、別の端末には引き継がれないので、精算後に「取引履歴」タブからCSVで保存してください。</p>
-    <p class="note">ホーム画面に追加すると、電波がなくてもアプリとして起動できます（初回だけ電波のある場所で開いてください）。</p>
-    <div id="resetArea"></div>
+
+    <div class="group">
+      <h3 class="sh">記録</h3>
+      <div class="set"><div class="row danger-row" id="resetArea"></div></div>
+      <p class="sf">消す前に「履歴」タブからCSVで保存しておくと安心です。ホーム画面に追加すると、電波がなくてもアプリとして起動できます（初回だけ電波のある場所で開いてください）。</p>
+    </div>
   </div>
 </section>
 
@@ -495,8 +537,8 @@ function renderHist(){
     const tr=document.createElement("tr");
     if(t.ev){tr.className="ev";tr.innerHTML=`<td></td><td class="num">${t.ev.time}</td><td colspan="7">価格変更 <span class="num">${yen(t.ev.from)} → ${yen(t.ev.to)}</span></td>`;b.appendChild(tr);return;}
     if(t.void)tr.className="void";
-    tr.innerHTML=`<td class="num">${label(t)}</td><td class="num">${t.time}</td><td class="rt num">${yen(unitPrice(t))}</td><td class="rt num">${t.nashi}</td><td class="rt num">${t.ari}</td>
-      <td class="rt num">${yen(t.total)}</td><td class="rt num">${yen(t.recv)}</td><td class="rt num">${yen(t.change??(t.recv-t.total))}</td>
+    tr.innerHTML=`<td class="num">${label(t)}</td><td class="num">${t.time}</td><td class="rt num opt">${yen(unitPrice(t))}</td><td class="rt num">${t.nashi}</td><td class="rt num">${t.ari}</td>
+      <td class="rt num">${yen(t.total)}</td><td class="rt num opt">${yen(t.recv)}</td><td class="rt num opt">${yen(t.change??(t.recv-t.total))}</td>
       <td class="rt">${t.void?"取消済":`<button class="mini" data-void="${t.id}">取消</button>`}</td>`;
     b.appendChild(tr);
   });
@@ -554,10 +596,10 @@ $("iReg").addEventListener("change",()=>{
   P.reg=v;savePrefs();renderSell();toast(`この端末のレジ名を ${v} にしました`);
 });
 $("iSound").onchange=()=>{P.sound=$("iSound").checked;savePrefs();beep();};
-function resetIdle(){$("resetArea").innerHTML='<button class="mini danger" id="rAsk">売上記録をすべて消去</button>';$("rAsk").onclick=resetAsk;}
+function resetIdle(){$("resetArea").innerHTML='<button class="wide" id="rAsk">売上記録をすべて消去…</button>';$("rAsk").onclick=resetAsk;}
 function resetAsk(){
   const msg=cloudOn()?"すべての端末とクラウドの取引記録を消します。":"すべての取引記録を消します。";
-  $("resetArea").innerHTML=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="color:var(--danger)">${msg}</span><button class="mini danger" id="rYes">消去する</button><button class="mini" id="rNo">やめる</button></div>`;
+  $("resetArea").innerHTML=`<span style="color:var(--danger);flex:1;min-width:200px">${msg}</span><button class="mini" id="rNo">やめる</button><button class="mini danger" id="rYes">消去する</button>`;
   $("rNo").onclick=resetIdle;$("rYes").onclick=()=>{S.tx=[];S.priceLog=[];save();cloud("resetAll");newSale();renderSell();resetIdle();toast("取引記録を消去しました");};
 }
 
@@ -570,10 +612,8 @@ function renderCloud(){
   $("cloudState").textContent=CLOUD_TEXT[CS.state]||"";
   $("cloudState").className="cloud "+CS.state;
   {
-    $("cloudSub").textContent=!on?"未設定（firebase-config.js に設定を入れると使えます）"
-      :CS.state==="signedOut"?"ログインすると、すべての端末で同じ記録を使えます"
-      :CS.state==="error"?CS.msg
-      :`${CS.email}　${CLOUD_TEXT[CS.state]||""}`;
+    $("cloudTitle").textContent=!on?"未設定":CS.state==="signedOut"?"ログインしていません":CS.state==="error"?"エラー":(CLOUD_TEXT[CS.state]||"");
+    $("cloudSub").textContent=!on?"firebase-config.js に設定を入れると使えます":CS.state==="error"?CS.msg:CS.email||"";
     $("cloudArea").innerHTML=on&&!["signedOut","loading"].includes(CS.state)?'<button class="mini" id="btnLogout">ログアウト</button>':"";
     if($("btnLogout"))$("btnLogout").onclick=()=>Cloud.signOut();
     $("loginRow").hidden=CS.state!=="signedOut";
